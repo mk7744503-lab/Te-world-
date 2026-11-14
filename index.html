@@ -1,0 +1,466 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#050611">
+<title>A World Made for Areshey</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#03040d;color:white;font-family:Georgia,serif}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+.ui{position:fixed;inset:0;z-index:3;pointer-events:none}
+.top{position:absolute;top:20px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:center}
+.brand{font:9px Arial;letter-spacing:3px;color:#d7c7d9}
+button{color:white;cursor:pointer;pointer-events:auto}
+.sound,.back{border:1px solid #c9a97877;background:#111323aa;padding:10px 14px;border-radius:30px;font:10px Arial;letter-spacing:2px;backdrop-filter:blur(12px)}
+.center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;text-align:center;transition:1.2s}
+.eyebrow{font:10px Arial;letter-spacing:5px;color:#e8c98b;text-transform:uppercase}
+h1{font-size:clamp(42px,10vw,80px);font-weight:400;line-height:1;margin:22px 0}
+h1 em{color:#e8b8d0}
+p{font-size:14px;line-height:1.8;color:#d6d0df}
+.main{margin-top:25px;padding:16px 27px;border:1px solid #e8c98b;background:#21182a99;border-radius:40px;font:10px Arial;letter-spacing:3px}
+.destinations{display:none;position:absolute;bottom:65px;left:4%;width:92%;grid-template-columns:repeat(3,1fr);gap:8px}
+.destinations button{background:#090a20c9;border:1px solid #c9a97866;border-radius:13px;padding:15px 4px;font:18px Georgia;backdrop-filter:blur(14px)}
+.destinations small{display:block;color:#e8c98b;font:9px Arial;letter-spacing:2px;margin-bottom:8px}
+.chapter{display:none;position:absolute;top:17%;left:5%;width:90%;text-align:center;text-shadow:0 3px 20px #000}
+.chapter h2{font-size:clamp(40px,9vw,65px);font-weight:400;margin:12px}
+.chapter p{max-width:420px;margin:auto}
+.back{display:none;position:absolute;top:72px;left:18px}
+.hint{position:absolute;bottom:20px;left:0;right:0;text-align:center;font:9px Arial;letter-spacing:3px;color:#aaa}
+.action{margin-top:22px;padding:13px 22px;background:#171326bb;border:1px solid #e8c98b88;border-radius:30px;font:10px Arial;letter-spacing:2px}
+@media(max-width:450px){.destinations button{font-size:15px}.destinations{bottom:58px}}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+</script>
+</head>
+<body>
+<canvas id="world"></canvas>
+<div class="ui">
+<div class="top">
+<div class="brand">A PRIVATE UNIVERSE · CREATED WITH LOVE</div>
+<button class="sound" id="sound">SOUND OFF</button>
+</div>
+
+<section class="center" id="intro">
+<div class="eyebrow">A journey beyond imagination</div>
+<h1>A World Made<br><em>for Areshey</em></h1>
+<p>Somewhere beyond the stars, a world has been waiting to welcome you.</p>
+<button class="main" id="enter">ENTER THE UNIVERSE</button>
+</section>
+
+<section class="chapter" id="chapter">
+<div class="eyebrow" id="chapterEyebrow">A world created for you</div>
+<h2 id="title"></h2>
+<p id="description"></p>
+<button class="action" id="explore">EXPLORE THIS WORLD</button>
+</section>
+
+<button class="back" id="back">← RETURN TO EARTH</button>
+
+<div class="destinations" id="destinations">
+<button data-place="Japan"><small>01 · EAST ASIA</small>Japan</button>
+<button data-place="Russia"><small>02 · THE NORTH</small>Russia</button>
+<button data-place="Paris"><small>03 · EUROPE</small>Paris</button>
+</div>
+<div class="hint" id="hint">A SMALL UNIVERSE, MADE WITH A VERY BIG FEELING</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+const canvas=document.querySelector('#world');
+const mobile=innerWidth<700;
+const renderer=new THREE.WebGLRenderer({canvas,antialias:!mobile});
+renderer.setPixelRatio(Math.min(devicePixelRatio,mobile?1.3:1.8));
+renderer.setSize(innerWidth,innerHeight);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x03040d);
+const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,500);
+camera.position.z=18;
+
+scene.add(new THREE.AmbientLight(0x8799c8,.8));
+const sun=new THREE.DirectionalLight(0xffdfbd,3);
+sun.position.set(-6,6,9);scene.add(sun);
+const pinkLight=new THREE.PointLight(0xe4a5d0,20,70);
+pinkLight.position.set(5,2,-12);scene.add(pinkLight);
+
+const clock=new THREE.Clock();
+let elapsed=0,mode='intro',transition=0,selected=null;
+const stars=new THREE.Group();scene.add(stars);
+
+// Star field
+const starPositions=new Float32Array((mobile?1800:4200)*3);
+for(let i=0;i<starPositions.length/3;i++){
+ const r=35+Math.random()*100;
+ const a=Math.random()*Math.PI*2;
+ const b=Math.acos(2*Math.random()-1);
+ starPositions[i*3]=r*Math.sin(b)*Math.cos(a);
+ starPositions[i*3+1]=r*Math.sin(b)*Math.sin(a);
+ starPositions[i*3+2]=r*Math.cos(b);
+}
+const sg=new THREE.BufferGeometry();
+sg.setAttribute('position',new THREE.BufferAttribute(starPositions,3));
+stars.add(new THREE.Points(sg,new THREE.PointsMaterial({
+ color:0xe1d9ff,size:.13,transparent:true,opacity:.9
+})));
+
+// Nebula
+const nebula=new THREE.Group();scene.add(nebula);
+for(let i=0;i<16;i++){
+ const sprite=new THREE.Sprite(new THREE.SpriteMaterial({
+ color:[0x65458f,0x8e477d,0x425e9c][i%3],
+ transparent:true,opacity:.13,
+ blending:THREE.AdditiveBlending,depthWrite:false
+ }));
+ sprite.position.set((Math.random()-.5)*55,(Math.random()-.5)*35,-25-Math.random()*35);
+ const size=12+Math.random()*20;
+ sprite.scale.set(size,size*.7,1);
+ nebula.add(sprite);
+}
+
+// Cosmic portal
+const portal=new THREE.Group();scene.add(portal);
+for(let i=0;i<7;i++){
+ const ring=new THREE.Mesh(
+  new THREE.TorusGeometry(3+i*.16,.025+(i%2)*.025,8,128),
+  new THREE.MeshBasicMaterial({
+   color:[0xe9b9d2,0xe9d2a2,0x9c8df0][i%3],
+   transparent:true,opacity:.8,
+   blending:THREE.AdditiveBlending
+  })
+ );
+ ring.rotation.z=i*.17;ring.rotation.y=i*.12;
+ portal.add(ring);
+}
+portal.position.z=-8;
+
+// Earth
+const earthGroup=new THREE.Group();scene.add(earthGroup);
+const earth=new THREE.Mesh(
+ new THREE.SphereGeometry(3.2,mobile?48:80,mobile?48:80),
+ new THREE.MeshStandardMaterial({color:0x185b88,roughness:.85})
+);
+earthGroup.add(earth);
+const land=new THREE.Group();earth.add(land);
+const landMaterial=new THREE.MeshStandardMaterial({color:0x79aa88,roughness:1});
+function patch(lat,lon,sx,sy){
+ const phi=(90-lat)*Math.PI/180,theta=(lon+180)*Math.PI/180;
+ const m=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),landMaterial);
+ const r=3.23;
+ m.position.set(-r*Math.sin(phi)*Math.cos(theta),r*Math.cos(phi),r*Math.sin(phi)*Math.sin(theta));
+ m.scale.set(sx,sy,.09);land.add(m);
+}
+[
+[48,-105,.7,.35],[25,-100,.38,.6],[5,-75,.3,.7],
+[52,15,.8,.3],[8,20,.45,.7],[48,85,1,.4],
+[28,110,.55,.3],[-25,135,.4,.2],[-25,25,.3,.5]
+].forEach(v=>patch(...v));
+
+const atmosphere=new THREE.Mesh(
+ new THREE.SphereGeometry(3.42,48,48),
+ new THREE.MeshBasicMaterial({color:0x65baff,side:THREE.BackSide,transparent:true,opacity:.15,blending:THREE.AdditiveBlending})
+);
+earthGroup.add(atmosphere);
+const cloud=new THREE.Mesh(
+ new THREE.SphereGeometry(3.27,48,48),
+ new THREE.MeshBasicMaterial({color:0xd9edff,wireframe:true,transparent:true,opacity:.07})
+);
+earthGroup.add(cloud);
+earthGroup.position.set(0,-.4,-30);
+earthGroup.scale.setScalar(.01);
+
+// Destination environments
+const world=new THREE.Group();scene.add(world);
+world.visible=false;
+
+const particlePositions=new Float32Array(1800*3);
+for(let i=0;i<1800;i++){
+ particlePositions[i*3]=(Math.random()-.5)*45;
+ particlePositions[i*3+1]=(Math.random()-.5)*28;
+ particlePositions[i*3+2]=-Math.random()*55;
+}
+const pg=new THREE.BufferGeometry();
+pg.setAttribute('position',new THREE.BufferAttribute(particlePositions,3));
+const particles=new THREE.Points(pg,new THREE.PointsMaterial({
+ color:0xffc9e0,size:.12,transparent:true,opacity:.9
+}));
+world.add(particles);
+
+// Distant mountains / landscape layers
+const landscape=new THREE.Group();world.add(landscape);
+function mountain(x,y,z,sx,sy,sz,color){
+ const mesh=new THREE.Mesh(
+  new THREE.ConeGeometry(1,1,7),
+  new THREE.MeshStandardMaterial({color,roughness:1,flatShading:true})
+ );
+ mesh.position.set(x,y,z);mesh.scale.set(sx,sy,sz);
+ landscape.add(mesh);
+}
+for(let i=0;i<20;i++){
+ mountain((Math.random()-.5)*38,-8+Math.random()*2,-13-Math.random()*20,
+  2+Math.random()*4,5+Math.random()*6,2+Math.random()*3,
+  [0x302544,0x46314e,0x28364f][i%3]);
+}
+
+// Floating glowing elements
+const magic=new THREE.Group();world.add(magic);
+for(let i=0;i<35;i++){
+ const m=new THREE.Mesh(
+  new THREE.SphereGeometry(.06+Math.random()*.08,8,8),
+  new THREE.MeshBasicMaterial({color:0xf3c9dd,transparent:true,opacity:.8})
+ );
+ m.position.set((Math.random()-.5)*25,(Math.random()-.5)*15,-5-Math.random()*25);
+ magic.add(m);
+}
+
+// Japan: cherry blossom trees and lanterns
+const japan=new THREE.Group();world.add(japan);
+function makeTree(x,z){
+ const trunk=new THREE.Mesh(
+  new THREE.CylinderGeometry(.07,.13,2.4,7),
+  new THREE.MeshStandardMaterial({color:0x49302c})
+ );
+ trunk.position.set(x,-5,z);japan.add(trunk);
+ for(let i=0;i<8;i++){
+  const petal=new THREE.Mesh(
+   new THREE.SphereGeometry(.48,9,8),
+   new THREE.MeshStandardMaterial({color:[0xe9a6c6,0xf4c4dc,0xb978a2][i%3],roughness:.9})
+  );
+  petal.position.set(x+(Math.random()-.5)*1.6,-3.8+Math.random()*1.2,z+(Math.random()-.5)*1.5);
+  petal.scale.set(1,.8,1);japan.add(petal);
+ }
+}
+for(let i=0;i<9;i++)makeTree((i-4)*3,-9-(i%3)*2);
+for(let i=0;i<7;i++){
+ const lamp=new THREE.Mesh(
+  new THREE.SphereGeometry(.22,12,12),
+  new THREE.MeshBasicMaterial({color:0xffad83})
+ );
+ lamp.position.set((i-3)*3,-2.5,-8);
+ japan.add(lamp);
+ const glow=new THREE.PointLight(0xff9d75,2,6);
+ glow.position.copy(lamp.position);japan.add(glow);
+}
+
+// Russia: snow ground and glowing aurora bands
+const russia=new THREE.Group();world.add(russia);
+const snow=new THREE.Mesh(
+ new THREE.PlaneGeometry(50,35),
+ new THREE.MeshStandardMaterial({color:0x9eacc9,roughness:1})
+);
+snow.rotation.x=-Math.PI/2;snow.position.set(0,-7,-12);russia.add(snow);
+for(let i=0;i<100;i++){
+ const flake=new THREE.Mesh(
+  new THREE.SphereGeometry(.035+Math.random()*.06,6,6),
+  new THREE.MeshBasicMaterial({color:0xe5f3ff})
+ );
+ flake.position.set((Math.random()-.5)*35,Math.random()*18-2,-Math.random()*30);
+ flake.userData.speed=.3+Math.random()*.8;
+ russia.add(flake);
+}
+for(let i=0;i<3;i++){
+ const aurora=new THREE.Mesh(
+  new THREE.TorusGeometry(12+i*2,.16,8,100,Math.PI*1.3),
+  new THREE.MeshBasicMaterial({color:[0x64e5c3,0x7a9eff,0xb18bff][i],transparent:true,opacity:.32})
+ );
+ aurora.position.set(0,7-i*1.3,-19-i*2);
+ aurora.rotation.x=.2;aurora.rotation.z=i*.3;
+ russia.add(aurora);
+}
+
+// Paris: golden city silhouette and Eiffel-inspired tower
+const paris=new THREE.Group();world.add(paris);
+const ground=new THREE.Mesh(
+ new THREE.PlaneGeometry(50,35),
+ new THREE.MeshStandardMaterial({color:0x493345,roughness:1})
+);
+ground.rotation.x=-Math.PI/2;ground.position.set(0,-7,-12);paris.add(ground);
+for(let i=0;i<24;i++){
+ const h=2+Math.random()*5;
+ const building=new THREE.Mesh(
+  new THREE.BoxGeometry(1.4,h,1.5),
+  new THREE.MeshStandardMaterial({color:[0x61465c,0x846174,0x493b57][i%3]})
+ );
+ building.position.set((i-12)*1.6,-7+h/2,-13-Math.random()*5);
+ paris.add(building);
+}
+const tower=new THREE.Group();paris.add(tower);
+const towerMat=new THREE.MeshStandardMaterial({color:0xd8b37a,metalness:.5,roughness:.4});
+const base=new THREE.Mesh(new THREE.CylinderGeometry(.13,.85,6,8),towerMat);
+base.position.set(0,-4,-9);tower.add(base);
+const top=new THREE.Mesh(new THREE.CylinderGeometry(.035,.13,2,8),towerMat);
+top.position.set(0,0,-9);tower.add(top);
+for(let y=-5;y<-.5;y+=1.3){
+ const bar=new THREE.Mesh(new THREE.TorusGeometry(.45+(y+5)*.1,.045,6,24),towerMat);
+ bar.position.set(0,y,-9);tower.add(bar);
+}
+const cityLight=new THREE.PointLight(0xffc47b,28,40);
+cityLight.position.set(0,2,-8);paris.add(cityLight);
+
+// UI and scene controls
+const intro=document.querySelector('#intro');
+const destinations=document.querySelector('#destinations');
+const chapter=document.querySelector('#chapter');
+const back=document.querySelector('#back');
+const hint=document.querySelector('#hint');
+
+const places={
+ Japan:{
+  group:japan,sky:0x201326,color:0xffb6d4,
+  text:'Walk beneath cherry blossoms. Lanterns glow as petals dance in the evening breeze.'
+ },
+ Russia:{
+  group:russia,sky:0x101d38,color:0x9cebdc,
+  text:'Enter a world of quiet snow, frozen horizons and dancing northern lights.'
+ },
+ Paris:{
+  group:paris,sky:0x302039,color:0xf1c98b,
+  text:'Discover a golden city where glowing windows and evening skies create magic.'
+ }
+};
+
+function hideAll(){
+ [japan,russia,paris].forEach(g=>g.visible=false);
+}
+hideAll();
+
+document.querySelector('#enter').onclick=()=>{
+ mode='portal';transition=0;
+ intro.style.opacity='0';
+ intro.style.transform='translate(-50%,-55%)';
+ setTimeout(()=>intro.style.display='none',1300);
+ hint.textContent='TRAVELLING THROUGH THE STARS';
+};
+
+function selectPlace(name){
+ selected=name;
+ const p=places[name];
+ mode='destination';
+ hideAll();p.group.visible=true;
+ world.visible=true;
+ particles.material.color.setHex(p.color);
+ scene.background.setHex(p.sky);
+ chapter.style.display='block';
+ document.querySelector('#title').textContent=name;
+ document.querySelector('#description').textContent=p.text;
+ destinations.style.display='none';
+ back.style.display='block';
+ hint.textContent='YOUR JOURNEY HAS JUST BEGUN';
+ camera.position.set(0,1,18);
+}
+document.querySelectorAll('[data-place]').forEach(b=>{
+ b.onclick=()=>selectPlace(b.dataset.place);
+});
+
+back.onclick=()=>{
+ mode='earth';world.visible=false;earthGroup.visible=true;
+ scene.background.setHex(0x03040d);
+ chapter.style.display='none';
+ destinations.style.display='grid';
+ back.style.display='none';
+ camera.position.set(0,0,10.5);
+ hint.textContent='CHOOSE YOUR NEXT DESTINATION';
+};
+
+// Simple interactive exploration effect
+document.querySelector('#explore').onclick=()=>{
+ camera.position.z-=2;
+ camera.position.y-=.5;
+ document.querySelector('#description').textContent=
+ 'Look around. Let this little world unfold, one beautiful detail at a time.';
+};
+
+// Sound generated by Web Audio, user activated only
+let audioCtx=null,osc=null,gain=null,soundOn=false;
+document.querySelector('#sound').onclick=()=>{
+ if(!audioCtx){
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  osc=audioCtx.createOscillator();
+  gain=audioCtx.createGain();
+  const filter=audioCtx.createBiquadFilter();
+  filter.type='lowpass';filter.frequency.value=300;
+  osc.type='sine';osc.frequency.value=55;
+  gain.gain.value=0;
+  osc.connect(filter);filter.connect(gain);gain.connect(audioCtx.destination);
+  osc.start();
+ }
+ soundOn=!soundOn;
+ audioCtx.resume();
+ gain.gain.setTargetAtTime(soundOn?.055:0,audioCtx.currentTime,.6);
+ document.querySelector('#sound').textContent=soundOn?'SOUND ON':'SOUND OFF';
+};
+
+function animate(){
+ requestAnimationFrame(animate);
+ const dt=Math.min(clock.getDelta(),.04);
+ elapsed+=dt;
+
+ stars.rotation.y+=dt*.003;
+ nebula.rotation.z=Math.sin(elapsed*.04)*.02;
+ portal.rotation.z+=dt*.08;
+ portal.rotation.y=Math.sin(elapsed*.3)*.1;
+ earth.rotation.y+=dt*.045;
+ cloud.rotation.y-=dt*.02;
+ magic.rotation.y+=dt*.025;
+
+ if(mode==='intro'){
+  portal.visible=true;earthGroup.visible=false;
+  camera.position.z=18+Math.sin(elapsed*.2)*.3;
+  camera.lookAt(0,0,-8);
+ }
+ if(mode==='portal'){
+  progress=Math.min(1,progress+dt*.20);
+  portal.scale.setScalar(1+progress*2);
+  camera.position.z=18-progress*14;
+  camera.lookAt(0,0,-8);
+  if(progress>=1){
+   mode='earth';portal.visible=false;
+   earthGroup.visible=true;
+   earthGroup.position.set(0,-.35,-2.8);
+   earthGroup.scale.setScalar(1);
+   camera.position.set(0,0,10.5);
+   destinations.style.display='grid';
+   hint.textContent='CHOOSE YOUR DESTINATION';
+  }
+ }
+ if(mode==='earth'){
+  earthGroup.rotation.y+=dt*.025;
+  camera.position.x=Math.sin(elapsed*.13)*.18;
+  camera.lookAt(0,0,0);
+ }
+ if(mode==='destination'){
+  world.rotation.y=Math.sin(elapsed*.1)*.025;
+  camera.position.x=Math.sin(elapsed*.16)*.25;
+  camera.lookAt(0,0,-10);
+  russia.children.forEach(obj=>{
+   if(obj.userData.speed){
+    obj.position.y-=obj.userData.speed*dt;
+    if(obj.position.y<-9)obj.position.y=12;
+   }
+  });
+  japan.children.forEach(obj=>{
+   if(obj.geometry?.type==='SphereGeometry'){
+    obj.position.y+=Math.sin(elapsed*1.4+obj.position.x)*dt*.025;
+   }
+  });
+ }
+ renderer.render(scene,camera);
+}
+animate();
+
+window.addEventListener('resize',()=>{
+ camera.aspect=innerWidth/innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+ renderer.setPixelRatio(Math.min(devicePixelRatio,mobile?1.3:1.8));
+});
+</script>
+</body>
+</html>
